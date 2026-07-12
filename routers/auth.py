@@ -96,7 +96,7 @@ async def me(request: Request):
     except Exception as exc:
         return storage_err(exc)
     if not row:
-        return err(404, "User not found.")
+        return err(401, "Session expired. Please sign in again.")
     return JSONResponse(row)
 
 
