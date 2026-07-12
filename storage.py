@@ -124,6 +124,10 @@ async def mark_section_complete(user_id: int, section_id: str) -> Optional[int]:
         return await asyncio.to_thread(
             _mark_section_complete_supabase, user_id, section_id
         )
+    # Stale JWTs can reference deleted users — fail cleanly instead of FK 500.
+    profile = await db.fetchone("SELECT id FROM users WHERE id = ?", (user_id,))
+    if not profile:
+        raise PermissionError("User not found")
     await db.execute(
         "INSERT INTO sections (user_id, section_id) VALUES (?, ?) "
         "ON CONFLICT(user_id, section_id) DO UPDATE SET completed=1, completed_at=strftime('%s','now')",
@@ -208,6 +212,35 @@ async def save_quiz_score(user_id: int, quiz_id: str, score: int, total: int) ->
     )
 
 
+async def get_leaderboard_opt_in(user_id: int) -> bool:
+    if USE_SUPABASE:
+        try:
+            return await asyncio.to_thread(_get_leaderboard_opt_in_supabase, user_id)
+        except Exception:
+            return False
+    row = await db.fetchone(
+        "SELECT leaderboard_opt_in FROM user_prefs WHERE user_id = ?",
+        (user_id,),
+    )
+    return bool(row and row["leaderboard_opt_in"])
+
+
+async def set_leaderboard_opt_in(user_id: int, opt_in: bool) -> bool:
+    value = 1 if opt_in else 0
+    if USE_SUPABASE:
+        try:
+            await asyncio.to_thread(_set_leaderboard_opt_in_supabase, user_id, bool(opt_in))
+        except Exception:
+            pass
+        return bool(opt_in)
+    await db.execute(
+        "INSERT INTO user_prefs (user_id, leaderboard_opt_in) VALUES (?, ?) "
+        "ON CONFLICT(user_id) DO UPDATE SET leaderboard_opt_in = excluded.leaderboard_opt_in",
+        (user_id, value),
+    )
+    return bool(opt_in)
+
+
 async def log_solver_use(
     user_id: Optional[int], expression: Optional[str], result: Optional[str]
 ) -> None:
@@ -260,6 +293,7 @@ async def _get_progress_sqlite(user_id: int) -> Dict[str, Any]:
         "quizScores": await list_quiz_scores(user_id),
         "bookmarks": await list_bookmarks(user_id),
         "solverUses": solver_count,
+        "leaderboardOptIn": await get_leaderboard_opt_in(user_id),
     }
 
 
@@ -342,6 +376,7 @@ if USE_SUPABASE:
             "quizScores": _list_quiz_scores_supabase(user_id),
             "bookmarks": _list_bookmarks_supabase(user_id),
             "solverUses": getattr(solver_resp, "count", 0) or 0,
+            "leaderboardOptIn": _get_leaderboard_opt_in_supabase(user_id),
         }
 
     def _mark_section_complete_supabase(user_id: int, section_id: str) -> Optional[int]:
@@ -469,3 +504,28 @@ if USE_SUPABASE:
             .execute()
         )
         return _data(resp) or []
+
+    def _get_leaderboard_opt_in_supabase(user_id: int) -> bool:
+        try:
+            resp = (
+                _supabase.from_("user_prefs")
+                .select("leaderboard_opt_in")
+                .eq("user_id", user_id)
+                .limit(1)
+                .execute()
+            )
+            row = _first(resp)
+            return bool(row and row.get("leaderboard_opt_in"))
+        except Exception:
+            return False
+
+    def _set_leaderboard_opt_in_supabase(user_id: int, opt_in: bool) -> None:
+        resp = (
+            _supabase.from_("user_prefs")
+            .upsert(
+                {"user_id": user_id, "leaderboard_opt_in": bool(opt_in)},
+                on_conflict="user_id",
+            )
+            .execute()
+        )
+        _data(resp)
