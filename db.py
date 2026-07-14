@@ -59,6 +59,11 @@ CREATE TABLE IF NOT EXISTS solver_history (
     result     TEXT,
     created_at INTEGER NOT NULL DEFAULT (strftime('%s','now'))
 );
+
+CREATE TABLE IF NOT EXISTS user_prefs (
+    user_id              INTEGER PRIMARY KEY REFERENCES users(id) ON DELETE CASCADE,
+    leaderboard_opt_in   INTEGER NOT NULL DEFAULT 0
+);
 """
 
 

@@ -5,10 +5,14 @@ from starlette.requests import Request
 from starlette.responses import JSONResponse
 from datetime import datetime
 
-from progress_store import get_progress, mark_section_complete, unmark_section_complete
+from storage import (
+    get_progress,
+    mark_section_complete,
+    unmark_section_complete,
+    set_leaderboard_opt_in,
+)
 from auth_utils import require_user, err
 
-# ── All topics defined in the app ─────────────────────────────
 ALL_TOPICS = [
     "partial-derivatives",
     "vector-calculus",
@@ -32,7 +36,6 @@ ALL_GUIDE_PARTS = {
 }
 
 
-# ── Helper: build comprehensive progress summary ──────────────
 def build_summary(user_id: str, raw: dict) -> dict:
     """
     raw = whatever get_progress() returns.
@@ -51,7 +54,6 @@ def build_summary(user_id: str, raw: dict) -> dict:
     quizzes    = raw.get("quizzes",  {})
     practice   = raw.get("practice", {})
 
-    # ── Topic completion ─────────────────────────────────────
     completed_topics = []
     for topic in ALL_TOPICS:
         part1 = sections.get(f"{topic}/1", {}).get("completed", False)
@@ -64,7 +66,7 @@ def build_summary(user_id: str, raw: dict) -> dict:
     num_remaining    = total_topics - num_completed
     overall_progress = round((num_completed / total_topics) * 100) if total_topics else 0
 
-    # ── Study guide parts ────────────────────────────────────
+
     total_guide_parts     = sum(ALL_GUIDE_PARTS.values())
     completed_guide_parts = sum(
         1 for sid, data in sections.items() if data.get("completed", False)
@@ -83,7 +85,6 @@ def build_summary(user_id: str, raw: dict) -> dict:
             "percent":        round((done / parts) * 100) if parts else 0,
         })
 
-    # ── Quiz stats ───────────────────────────────────────────
     quiz_list      = list(quizzes.values())
     total_quizzes  = len(quiz_list)
     done_quizzes   = sum(1 for q in quiz_list if q.get("completed", False))
@@ -104,7 +105,6 @@ def build_summary(user_id: str, raw: dict) -> dict:
         if data.get("completed", False)
     ]
 
-    # ── Practice stats ───────────────────────────────────────
     total_attempts = sum(p.get("attempts", 0) for p in practice.values())
     total_correct  = sum(p.get("correct",  0) for p in practice.values())
     accuracy       = round((total_correct / total_attempts) * 100) if total_attempts else 0
@@ -119,7 +119,6 @@ def build_summary(user_id: str, raw: dict) -> dict:
         for topic, data in practice.items()
     ]
 
-    # ── Course-wise breakdown ────────────────────────────────
     course_progress = []
     for topic in ALL_TOPICS:
         parts      = ALL_GUIDE_PARTS[topic]
@@ -141,7 +140,6 @@ def build_summary(user_id: str, raw: dict) -> dict:
             "practiceCorrect": practice_info.get("correct",  0),
         })
 
-    # ── Last activity ────────────────────────────────────────
     all_dates = [
         data.get("completed_at")
         for data in list(sections.values()) + list(quizzes.values())
@@ -149,7 +147,6 @@ def build_summary(user_id: str, raw: dict) -> dict:
     ]
     last_activity = max(all_dates) if all_dates else None
 
-    # ── Final payload ────────────────────────────────────────
     return {
         "success": True,
         "data": {
@@ -196,7 +193,6 @@ def build_summary(user_id: str, raw: dict) -> dict:
     }
 
 
-# ── Routes ────────────────────────────────────────────────────
 
 async def get_progress_route(request: Request):
     """GET /progress/ — original simple progress snapshot."""
@@ -236,8 +232,17 @@ async def mark_complete(request: Request):
     if not section_id:
         return err(400, "section_id required.")
 
-    await mark_section_complete(user_id, section_id)
-    return JSONResponse({"ok": True, "section_id": section_id})
+    try:
+        completed_at = await mark_section_complete(user_id, section_id)
+    except PermissionError:
+        return err(401, "Session expired. Please sign in again.")
+    except Exception as exc:
+        message = str(exc)
+        if "FOREIGN KEY" in message or "foreign key" in message.lower():
+            return err(401, "Session expired. Please sign in again.")
+        return err(500, f"Could not mark section complete: {message}")
+
+    return JSONResponse({"ok": True, "section_id": section_id, "completed_at": completed_at})
 
 
 async def unmark_complete(request: Request):
@@ -251,9 +256,29 @@ async def unmark_complete(request: Request):
     return JSONResponse({"ok": True})
 
 
+async def set_leaderboard_opt_in_route(request: Request):
+    user_id = require_user(request)
+    if not user_id:
+        return err(401, "Not authenticated.")
+    try:
+        body = await request.json()
+    except Exception:
+        return err(400, "Invalid JSON.")
+
+    if "opt_in" not in body:
+        return err(400, "opt_in required.")
+
+    opted = await set_leaderboard_opt_in(user_id, bool(body.get("opt_in")))
+    return JSONResponse({"ok": True, "leaderboardOptIn": opted})
+
+
 routes = [
     Route("/",                       get_progress_route, methods=["GET"]),
     Route("/summary",                get_full_progress,  methods=["GET"]),   # ← Objective 19
     Route("/section/complete",       mark_complete,      methods=["POST"]),
     Route("/section/{section_id}",   unmark_complete,    methods=["DELETE"]),
+    Route("/", get_progress_route, methods=["GET"]),
+    Route("/section/complete", mark_complete, methods=["POST"]),
+    Route("/section/{section_id}", unmark_complete, methods=["DELETE"]),
+    Route("/leaderboard", set_leaderboard_opt_in_route, methods=["POST"]),
 ]
