@@ -5,6 +5,7 @@ No pydantic, no aiosqlite, no SQLAlchemy.
 """
 
 import os
+import sys
 from contextlib import asynccontextmanager
 from pathlib import Path
 
@@ -30,6 +31,17 @@ from routers.progress import routes as progress_routes
 from routers.bookmarks import routes as bookmark_routes
 from routers.quiz import routes as quiz_routes
 from routers.solver_proxy import routes as solver_routes
+
+# Calculus AI Chatbot routes (submodule) — serves /api/chat/*
+_CHATBOT_ROOT = Path(__file__).resolve().parent.parent / "Calculus-AI-Chatbot"
+if _CHATBOT_ROOT.is_dir() and str(_CHATBOT_ROOT) not in sys.path:
+    sys.path.insert(0, str(_CHATBOT_ROOT))
+try:
+    from backend.app.routes.chat import routes as chat_routes  # noqa: E402
+    from backend.app.database.db import init_db as init_chat_db  # noqa: E402
+except ImportError:
+    chat_routes = []
+    init_chat_db = None
 
 # ── Route handlers ────────────────────────────────────────────────────────────
 
@@ -183,6 +195,8 @@ async def docs(request: Request):
 
 async def on_startup():
     await init_storage()
+    if init_chat_db is not None:
+        await init_chat_db()
 
 
 @asynccontextmanager
@@ -193,30 +207,42 @@ async def lifespan(app):
 
 # ── App ───────────────────────────────────────────────────────────────────────
 
-ALLOWED_ORIGINS = os.getenv(
-    "ALLOWED_ORIGINS", "http://localhost:3000,http://127.0.0.1:3000"
-).split(",")
+# Frontend localhost origins (CRA 3000/3001 + Vite 5173). Override via ALLOWED_ORIGINS.
+_DEFAULT_ORIGINS = (
+    "http://localhost:3000,http://127.0.0.1:3000,"
+    "http://localhost:3001,http://127.0.0.1:3001,"
+    "http://localhost:5173,http://127.0.0.1:5173"
+)
+ALLOWED_ORIGINS = [
+    origin.strip()
+    for origin in os.getenv("ALLOWED_ORIGINS", _DEFAULT_ORIGINS).split(",")
+    if origin.strip()
+]
+
+_routes = [
+    Route("/", root),
+    Route("/docs", docs),
+    Route("/favicon.ico", favicon),
+    Route("/api/health", health),
+    Mount("/api/auth", routes=auth_routes),
+    Mount("/api/progress", routes=progress_routes),
+    Mount("/api/bookmarks", routes=bookmark_routes),
+    Mount("/api/quiz", routes=quiz_routes),
+    Mount("/api/solver", routes=solver_routes),
+]
+if chat_routes:
+    _routes.append(Mount("/api/chat", routes=chat_routes))
 
 app = Starlette(
     debug=False,
-    routes=[
-        Route("/", root),
-        Route("/docs", docs),
-        Route("/favicon.ico", favicon),
-        Route("/api/health", health),
-        Mount("/api/auth", routes=auth_routes),
-        Mount("/api/progress", routes=progress_routes),
-        Mount("/api/bookmarks", routes=bookmark_routes),
-        Mount("/api/quiz", routes=quiz_routes),
-        Mount("/api/solver", routes=solver_routes),
-    ],
+    routes=_routes,
     middleware=[
         Middleware(
             CORSMiddleware,
             allow_origins=ALLOWED_ORIGINS,
             allow_credentials=True,
-            allow_methods=["*"],
-            allow_headers=["*"],
+            allow_methods=["GET", "POST", "PUT", "DELETE", "OPTIONS", "PATCH"],
+            allow_headers=["Authorization", "Content-Type", "Accept", "Origin", "X-Requested-With"],
         )
     ],
     lifespan=lifespan,
