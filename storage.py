@@ -241,6 +241,40 @@ async def set_leaderboard_opt_in(user_id: int, opt_in: bool) -> bool:
     return bool(opt_in)
 
 
+def _leaderboard_entry(
+    user_id: int, username: str, topics: Any, quiz_count: Any, quiz_pct: Any
+) -> Dict[str, Any]:
+    return {
+        "userId": int(user_id),
+        "label": username or "Unknown",
+        "topics": int(topics or 0),
+        "quizCount": int(quiz_count or 0),
+        "quizPct": int(round(quiz_pct or 0)),
+    }
+
+
+async def get_leaderboard() -> list[Dict[str, Any]]:
+    """Stats for every user who opted in to the leaderboard."""
+    if USE_SUPABASE:
+        return await asyncio.to_thread(_get_leaderboard_supabase)
+    rows = await db.fetchall(
+        "SELECT u.id AS user_id, u.username, "
+        "  (SELECT COUNT(*) FROM sections s WHERE s.user_id = u.id AND s.completed = 1) AS topics, "
+        "  (SELECT COUNT(*) FROM quiz_scores q WHERE q.user_id = u.id) AS quiz_count, "
+        "  (SELECT AVG(q.score * 100.0 / q.total) FROM quiz_scores q "
+        "     WHERE q.user_id = u.id AND q.total > 0) AS quiz_pct "
+        "FROM users u "
+        "JOIN user_prefs p ON p.user_id = u.id "
+        "WHERE p.leaderboard_opt_in = 1"
+    )
+    return [
+        _leaderboard_entry(
+            row["user_id"], row["username"], row["topics"], row["quiz_count"], row["quiz_pct"]
+        )
+        for row in rows
+    ]
+
+
 async def log_solver_use(
     user_id: Optional[int], expression: Optional[str], result: Optional[str]
 ) -> None:
@@ -504,6 +538,63 @@ if USE_SUPABASE:
             .execute()
         )
         return _data(resp) or []
+
+    def _get_leaderboard_supabase() -> list[Dict[str, Any]]:
+        prefs_resp = (
+            _supabase.from_("user_prefs")
+            .select("user_id")
+            .eq("leaderboard_opt_in", True)
+            .execute()
+        )
+        user_ids = [row["user_id"] for row in (_data(prefs_resp) or [])]
+        if not user_ids:
+            return []
+
+        users_resp = (
+            _supabase.from_("users")
+            .select("id,username")
+            .in_("id", user_ids)
+            .execute()
+        )
+        usernames = {row["id"]: row["username"] for row in (_data(users_resp) or [])}
+
+        sections_resp = (
+            _supabase.from_("sections")
+            .select("user_id")
+            .in_("user_id", user_ids)
+            .eq("completed", True)
+            .execute()
+        )
+        topic_counts: Dict[int, int] = {}
+        for row in _data(sections_resp) or []:
+            topic_counts[row["user_id"]] = topic_counts.get(row["user_id"], 0) + 1
+
+        quiz_resp = (
+            _supabase.from_("quiz_scores")
+            .select("user_id,score,total")
+            .in_("user_id", user_ids)
+            .execute()
+        )
+        quiz_pcts: Dict[int, list] = {}
+        for row in _data(quiz_resp) or []:
+            if row.get("total"):
+                quiz_pcts.setdefault(row["user_id"], []).append(
+                    row["score"] * 100.0 / row["total"]
+                )
+
+        entries = []
+        for uid in user_ids:
+            pcts = quiz_pcts.get(uid, [])
+            entries.append(
+                _leaderboard_entry(
+                    uid,
+                    usernames.get(uid, "?"),
+                    topic_counts.get(uid, 0),
+                    len(pcts),
+                    sum(pcts) / len(pcts) if pcts else 0,
+                )
+            )
+        return entries
 
     def _get_leaderboard_opt_in_supabase(user_id: int) -> bool:
         try:
