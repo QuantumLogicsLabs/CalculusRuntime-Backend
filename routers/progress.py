@@ -7,6 +7,7 @@ from datetime import datetime
 
 from storage import (
     get_progress,
+    get_leaderboard,
     mark_section_complete,
     unmark_section_complete,
     set_leaderboard_opt_in,
@@ -256,6 +257,12 @@ async def unmark_complete(request: Request):
     return JSONResponse({"ok": True})
 
 
+async def get_leaderboard_route(request: Request):
+    """Anonymized entries for all opted-in users. Public — no auth required."""
+    entries = await get_leaderboard()
+    return JSONResponse({"entries": entries})
+
+
 async def set_leaderboard_opt_in_route(request: Request):
     user_id = require_user(request)
     if not user_id:
@@ -280,5 +287,6 @@ routes = [
     Route("/", get_progress_route, methods=["GET"]),
     Route("/section/complete", mark_complete, methods=["POST"]),
     Route("/section/{section_id}", unmark_complete, methods=["DELETE"]),
+    Route("/leaderboard", get_leaderboard_route, methods=["GET"]),
     Route("/leaderboard", set_leaderboard_opt_in_route, methods=["POST"]),
 ]
