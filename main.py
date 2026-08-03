@@ -32,6 +32,7 @@ from routers.bookmarks import routes as bookmark_routes
 from routers.quiz import routes as quiz_routes
 from routers.solver_proxy import routes as solver_routes
 from routers.certificates import routes as certificate_routes
+from routers.verification import routes as verification_routes
 
 # Calculus AI Chatbot routes (submodule) — serves /api/chat/*
 _CHATBOT_ROOT = Path(__file__).resolve().parent.parent / "Calculus-AI-Chatbot"
@@ -62,6 +63,7 @@ async def root(request: Request):
                 "quiz": "/api/quiz  (GET /  POST /)",
                 "solver": "/api/solver  (POST /log  GET /history)",
                 "certificates": "/api/certificates  (POST /generate  GET /verify?token=)",
+                "verify_course": "/api/verify-course  (POST /  — body: {userProgress, courseData})",
             },
         }
     )
@@ -185,6 +187,13 @@ _DOCS_HTML = """<!DOCTYPE html>
 </div>
 
 <div class="group">
+  <div class="group-title">Course Verification &nbsp;/api/verify-course</div>
+  <div class="route"><span class="method post">POST</span>
+    <div><div class="path">/api/verify-course/</div>
+    <div class="desc">Checks course completion. Body: <code>{"userProgress","courseData"}</code></div></div></div>
+</div>
+
+<div class="group">
   <div class="group-title">System</div>
   <div class="route"><span class="method get">GET</span>
     <div><div class="path">/api/health</div>
@@ -242,6 +251,7 @@ _routes = [
     Mount("/api/quiz", routes=quiz_routes),
     Mount("/api/solver", routes=solver_routes),
     Mount("/api/certificates", routes=certificate_routes),
+    Mount("/api/verify-course", routes=verification_routes),
 ]
 if chat_routes:
     _routes.append(Mount("/api/chat", routes=chat_routes))
