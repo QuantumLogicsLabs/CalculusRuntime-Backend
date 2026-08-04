@@ -228,17 +228,21 @@ async def lifespan(app):
 
 # ── App ───────────────────────────────────────────────────────────────────────
 
-# Frontend localhost origins (CRA 3000/3001 + Vite 5173). Override via ALLOWED_ORIGINS.
+# Local + production frontend origins. Extra origins via ALLOWED_ORIGINS (comma-separated).
+# Defaults are always included so a localhost-only SnapDeploy env cannot wipe production CORS.
 _DEFAULT_ORIGINS = (
     "http://localhost:3000,http://127.0.0.1:3000,"
     "http://localhost:3001,http://127.0.0.1:3001,"
-    "http://localhost:5173,http://127.0.0.1:5173"
+    "http://localhost:5173,http://127.0.0.1:5173,"
+    "https://calculus-runtime-frontend-ten.vercel.app,"
+    "https://calculus.quantumlogiclimited.com"
 )
-ALLOWED_ORIGINS = [
+_EXTRA_ORIGINS = os.getenv("ALLOWED_ORIGINS", "")
+ALLOWED_ORIGINS = list(dict.fromkeys(
     origin.strip()
-    for origin in os.getenv("ALLOWED_ORIGINS", _DEFAULT_ORIGINS).split(",")
+    for origin in f"{_DEFAULT_ORIGINS},{_EXTRA_ORIGINS}".split(",")
     if origin.strip()
-]
+))
 
 _routes = [
     Route("/", root),
