@@ -19,12 +19,17 @@ def generate_qr_svg(data: str, scale: int = 6) -> str:
     return buf.getvalue().decode("utf-8")
 
 
-def generate_qr_png_base64(data: str, scale: int = 6) -> str:
-    """Return a base64-encoded PNG (no data: prefix) encoding `data`."""
+def generate_qr_png_bytes(data: str, scale: int = 6) -> bytes:
+    """Return raw PNG bytes encoding `data` (for embedding in PDFs, etc.)."""
     qr = segno.make(data, error="m")
     buf = io.BytesIO()
     qr.save(buf, kind="png", scale=scale)
-    return base64.b64encode(buf.getvalue()).decode("ascii")
+    return buf.getvalue()
+
+
+def generate_qr_png_base64(data: str, scale: int = 6) -> str:
+    """Return a base64-encoded PNG (no data: prefix) encoding `data`."""
+    return base64.b64encode(generate_qr_png_bytes(data, scale=scale)).decode("ascii")
 
 
 def generate_qr_png_data_uri(data: str, scale: int = 6) -> str:
