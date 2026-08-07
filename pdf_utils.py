@@ -61,7 +61,7 @@ def build_certificate_pdf(
     pdf.set_xy(0, 34)
     pdf.set_font("Helvetica", "", 10)
     pdf.set_text_color(*MUTED)
-    pdf.cell(297, 6, "MULTIVARIABLE TOOLS", align="C")
+    pdf.cell(297, 6, course_title.upper(), align="C")
 
     # Title
     pdf.set_xy(0, 55)
