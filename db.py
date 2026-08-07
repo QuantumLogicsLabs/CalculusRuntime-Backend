@@ -60,6 +60,29 @@ CREATE TABLE IF NOT EXISTS solver_history (
     created_at INTEGER NOT NULL DEFAULT (strftime('%s','now'))
 );
 
+CREATE TABLE IF NOT EXISTS quiz_attempts (
+    id           INTEGER PRIMARY KEY AUTOINCREMENT,
+    user_id      INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    quiz_id      TEXT    NOT NULL,
+    score        INTEGER NOT NULL,
+    total        INTEGER NOT NULL,
+    passed       INTEGER NOT NULL DEFAULT 0,
+    attempted_at INTEGER NOT NULL DEFAULT (strftime('%s','now'))
+);
+
+CREATE TABLE IF NOT EXISTS certificates (
+    id            INTEGER PRIMARY KEY AUTOINCREMENT,
+    cert_id       TEXT    UNIQUE NOT NULL,
+    user_id       INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    course_id     TEXT    NOT NULL,
+    course_title  TEXT    NOT NULL,
+    full_name     TEXT    NOT NULL,
+    score         INTEGER,
+    total         INTEGER,
+    issued_at     INTEGER NOT NULL DEFAULT (strftime('%s','now')),
+    UNIQUE(user_id, course_id)
+);
+
 CREATE TABLE IF NOT EXISTS user_prefs (
     user_id              INTEGER PRIMARY KEY REFERENCES users(id) ON DELETE CASCADE,
     leaderboard_opt_in   INTEGER NOT NULL DEFAULT 0
