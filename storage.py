@@ -212,6 +212,101 @@ async def save_quiz_score(user_id: int, quiz_id: str, score: int, total: int) ->
     )
 
 
+# ── Quiz attempt history (every attempt, never overwritten) ───────────────────
+
+
+async def record_quiz_attempt(
+    user_id: int, quiz_id: str, score: int, total: int, passed: bool
+) -> None:
+    if USE_SUPABASE:
+        return await asyncio.to_thread(
+            _record_quiz_attempt_supabase, user_id, quiz_id, score, total, passed
+        )
+    await db.execute(
+        "INSERT INTO quiz_attempts (user_id, quiz_id, score, total, passed) "
+        "VALUES (?, ?, ?, ?, ?)",
+        (user_id, quiz_id, score, total, 1 if passed else 0),
+    )
+
+
+async def list_quiz_attempts(
+    user_id: int, quiz_id: Optional[str] = None
+) -> list[Dict[str, Any]]:
+    if USE_SUPABASE:
+        return await asyncio.to_thread(_list_quiz_attempts_supabase, user_id, quiz_id)
+    if quiz_id:
+        rows = await db.fetchall(
+            "SELECT quiz_id, score, total, passed, attempted_at FROM quiz_attempts "
+            "WHERE user_id = ? AND quiz_id = ? ORDER BY attempted_at DESC",
+            (user_id, quiz_id),
+        )
+    else:
+        rows = await db.fetchall(
+            "SELECT quiz_id, score, total, passed, attempted_at FROM quiz_attempts "
+            "WHERE user_id = ? ORDER BY attempted_at DESC",
+            (user_id,),
+        )
+    return [
+        {
+            "quizId": r["quiz_id"],
+            "score": r["score"],
+            "total": r["total"],
+            "passed": bool(r["passed"]),
+            "attemptedAt": r["attempted_at"],
+        }
+        for r in rows
+    ]
+
+
+# ── Certificates (permanent record, one per user+course) ──────────────────────
+
+
+async def save_certificate_record(
+    cert_id: str,
+    user_id: int,
+    course_id: str,
+    course_title: str,
+    full_name: str,
+    score: Optional[int],
+    total: Optional[int],
+) -> Dict[str, Any]:
+    if USE_SUPABASE:
+        return await asyncio.to_thread(
+            _save_certificate_record_supabase,
+            cert_id, user_id, course_id, course_title, full_name, score, total,
+        )
+    existing = await db.fetchone(
+        "SELECT cert_id FROM certificates WHERE user_id = ? AND course_id = ?",
+        (user_id, course_id),
+    )
+    if existing:
+        await db.execute(
+            "UPDATE certificates SET full_name = ?, score = ?, total = ? "
+            "WHERE user_id = ? AND course_id = ?",
+            (full_name, score, total, user_id, course_id),
+        )
+        cert_id = existing["cert_id"]
+    else:
+        await db.execute(
+            "INSERT INTO certificates "
+            "(cert_id, user_id, course_id, course_title, full_name, score, total) "
+            "VALUES (?, ?, ?, ?, ?, ?, ?)",
+            (cert_id, user_id, course_id, course_title, full_name, score, total),
+        )
+    return await get_certificate_record(cert_id)
+
+
+async def get_certificate_record(cert_id: str) -> Optional[Dict[str, Any]]:
+    if USE_SUPABASE:
+        return await asyncio.to_thread(_get_certificate_record_supabase, cert_id)
+    row = await db.fetchone(
+        "SELECT cert_id, user_id, course_id, course_title, full_name, score, total, "
+        "issued_at FROM certificates WHERE cert_id = ?",
+        (cert_id,),
+    )
+    return dict(row) if row else None
+
+
 async def get_leaderboard_opt_in(user_id: int) -> bool:
     if USE_SUPABASE:
         try:
@@ -515,6 +610,91 @@ if USE_SUPABASE:
             .execute()
         )
         _data(resp)
+
+    def _record_quiz_attempt_supabase(
+        user_id: int, quiz_id: str, score: int, total: int, passed: bool
+    ) -> None:
+        resp = (
+            _supabase.from_("quiz_attempts")
+            .insert(
+                {
+                    "user_id": user_id,
+                    "quiz_id": quiz_id,
+                    "score": score,
+                    "total": total,
+                    "passed": passed,
+                }
+            )
+            .execute()
+        )
+        _data(resp)
+
+    def _list_quiz_attempts_supabase(
+        user_id: int, quiz_id: Optional[str]
+    ) -> list[Dict[str, Any]]:
+        query = _supabase.from_("quiz_attempts").select("*").eq("user_id", user_id)
+        if quiz_id:
+            query = query.eq("quiz_id", quiz_id)
+        resp = query.order("attempted_at", desc=True).execute()
+        rows = _data(resp) or []
+        return [
+            {
+                "quizId": row["quiz_id"],
+                "score": row["score"],
+                "total": row["total"],
+                "passed": bool(row["passed"]),
+                "attemptedAt": row["attempted_at"],
+            }
+            for row in rows
+        ]
+
+    def _save_certificate_record_supabase(
+        cert_id: str,
+        user_id: int,
+        course_id: str,
+        course_title: str,
+        full_name: str,
+        score: Optional[int],
+        total: Optional[int],
+    ) -> Dict[str, Any]:
+        existing_resp = (
+            _supabase.from_("certificates")
+            .select("cert_id")
+            .eq("user_id", user_id)
+            .eq("course_id", course_id)
+            .limit(1)
+            .execute()
+        )
+        existing = _first(existing_resp)
+        row_cert_id = existing["cert_id"] if existing else cert_id
+        resp = (
+            _supabase.from_("certificates")
+            .upsert(
+                {
+                    "cert_id": row_cert_id,
+                    "user_id": user_id,
+                    "course_id": course_id,
+                    "course_title": course_title,
+                    "full_name": full_name,
+                    "score": score,
+                    "total": total,
+                },
+                on_conflict="user_id,course_id",
+            )
+            .execute()
+        )
+        _data(resp)
+        return _get_certificate_record_supabase(row_cert_id)
+
+    def _get_certificate_record_supabase(cert_id: str) -> Optional[Dict[str, Any]]:
+        resp = (
+            _supabase.from_("certificates")
+            .select("*")
+            .eq("cert_id", cert_id)
+            .limit(1)
+            .execute()
+        )
+        return _first(resp)
 
     def _log_solver_use_supabase(
         user_id: int, expression: Optional[str], result: Optional[str]
