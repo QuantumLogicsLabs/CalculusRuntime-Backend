@@ -6,3 +6,4 @@ python-multipart==0.0.6
 anyio==3.7.1
 supabase==2.30.1
 segno==1.6.6
+fpdf2==2.8.7
