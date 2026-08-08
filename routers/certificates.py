@@ -128,6 +128,34 @@ async def generate_certificate(request: Request):
     )
 
 
+async def list_my_certificates(request: Request):
+    """GET /api/certificates/mine
+    🔒 Lists every certificate the current user has earned, across all
+    courses — used by the "My Certificates" page so completing course 2,
+    3, 4 adds to the list instead of replacing course 1's certificate.
+    """
+    user_id = require_user(request)
+    if not user_id:
+        return err(401, "Not authenticated.")
+
+    records = await storage.list_certificates_for_user(user_id)
+    return JSONResponse(
+        [
+            {
+                "cert_id": r["cert_id"],
+                "course_id": r["course_id"],
+                "course_title": r["course_title"],
+                "full_name": r["full_name"],
+                "score": r.get("score"),
+                "total": r.get("total"),
+                "issued_at": r["issued_at"],
+                "pdf_url": f"/api/certificates/{r['cert_id']}/pdf",
+            }
+            for r in records
+        ]
+    )
+
+
 async def get_my_certificate(request: Request):
     """GET /api/certificates/mine/{course_id}
     🔒 Returns the caller's already-issued certificate for this course, if
@@ -238,6 +266,7 @@ async def verify_certificate(request: Request):
 routes = [
     Route("/generate", generate_certificate, methods=["POST"]),
     Route("/verify", verify_certificate, methods=["GET"]),
+    Route("/mine", list_my_certificates, methods=["GET"]),
     Route("/mine/{course_id}", get_my_certificate, methods=["GET"]),
     Route("/{cert_id}/pdf", download_certificate_pdf, methods=["GET"]),
 ]
