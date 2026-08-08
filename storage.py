@@ -325,6 +325,21 @@ async def get_certificate_by_user_course(
     return dict(row) if row else None
 
 
+async def list_certificates_for_user(user_id: int) -> list[Dict[str, Any]]:
+    """All certificates a user has earned, across every course — one row
+    per (user, course) since that pairing is UNIQUE in the schema, so
+    completing a 2nd, 3rd, 4th course each adds a new certificate rather
+    than replacing the previous one."""
+    if USE_SUPABASE:
+        return await asyncio.to_thread(_list_certificates_for_user_supabase, user_id)
+    rows = await db.fetchall(
+        "SELECT cert_id, course_id, course_title, full_name, score, total, issued_at "
+        "FROM certificates WHERE user_id = ? ORDER BY issued_at DESC",
+        (user_id,),
+    )
+    return [dict(r) for r in rows]
+
+
 async def get_leaderboard_opt_in(user_id: int) -> bool:
     if USE_SUPABASE:
         try:
@@ -726,6 +741,16 @@ if USE_SUPABASE:
             .execute()
         )
         return _first(resp)
+
+    def _list_certificates_for_user_supabase(user_id: int) -> list[Dict[str, Any]]:
+        resp = (
+            _supabase.from_("certificates")
+            .select("*")
+            .eq("user_id", user_id)
+            .order("issued_at", desc=True)
+            .execute()
+        )
+        return _data(resp) or []
 
     def _log_solver_use_supabase(
         user_id: int, expression: Optional[str], result: Optional[str]
