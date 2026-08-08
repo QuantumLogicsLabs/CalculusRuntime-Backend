@@ -307,6 +307,24 @@ async def get_certificate_record(cert_id: str) -> Optional[Dict[str, Any]]:
     return dict(row) if row else None
 
 
+async def get_certificate_by_user_course(
+    user_id: int, course_id: str
+) -> Optional[Dict[str, Any]]:
+    """Look up a user's already-issued certificate for a course, if any —
+    used so revisiting the certificate page later doesn't require
+    re-generating (name prompt, quiz re-check) every time."""
+    if USE_SUPABASE:
+        return await asyncio.to_thread(
+            _get_certificate_by_user_course_supabase, user_id, course_id
+        )
+    row = await db.fetchone(
+        "SELECT cert_id, user_id, course_id, course_title, full_name, score, total, "
+        "issued_at FROM certificates WHERE user_id = ? AND course_id = ?",
+        (user_id, course_id),
+    )
+    return dict(row) if row else None
+
+
 async def get_leaderboard_opt_in(user_id: int) -> bool:
     if USE_SUPABASE:
         try:
@@ -691,6 +709,19 @@ if USE_SUPABASE:
             _supabase.from_("certificates")
             .select("*")
             .eq("cert_id", cert_id)
+            .limit(1)
+            .execute()
+        )
+        return _first(resp)
+
+    def _get_certificate_by_user_course_supabase(
+        user_id: int, course_id: str
+    ) -> Optional[Dict[str, Any]]:
+        resp = (
+            _supabase.from_("certificates")
+            .select("*")
+            .eq("user_id", user_id)
+            .eq("course_id", course_id)
             .limit(1)
             .execute()
         )
