@@ -26,7 +26,7 @@ from auth_utils import require_user, err, SECRET_KEY, ALGORITHM
 from quiz_bank import get_quiz, QUIZ_BANK
 
 ATTEMPT_TOKEN_TYP = "quiz_attempt"
-SECONDS_PER_QUESTION = 10
+SECONDS_PER_QUESTION = 40
 # Extra slack on top of the pure per-question budget to absorb network/render
 # latency between the timer hitting 0 client-side and the submit request
 # landing here. Keep this small — it's not meant to allow extra thinking time.
