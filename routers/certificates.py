@@ -128,6 +128,48 @@ async def generate_certificate(request: Request):
     )
 
 
+async def get_my_certificate(request: Request):
+    """GET /api/certificates/mine/{course_id}
+    🔒 Returns the caller's already-issued certificate for this course, if
+    one exists — so revisiting the certificate page later (new session,
+    days later, etc.) shows the download button immediately instead of
+    re-running verification / re-asking for a name.
+    404 if the user has no certificate for this course yet.
+    """
+    user_id = require_user(request)
+    if not user_id:
+        return err(401, "Not authenticated.")
+
+    course_id = request.path_params.get("course_id", "")
+    record = await storage.get_certificate_by_user_course(user_id, course_id)
+    if not record:
+        return err(404, "No certificate issued yet for this course.")
+
+    token = _sign_certificate(
+        record["cert_id"],
+        user_id,
+        record["full_name"],
+        record["course_id"],
+        record["course_title"],
+    )
+    verify_url = f"{FRONTEND_VERIFY_URL}?token={token}"
+
+    return JSONResponse(
+        {
+            "cert_id": record["cert_id"],
+            "token": token,
+            "verify_url": verify_url,
+            "qr_svg": qr_utils.generate_qr_svg(verify_url),
+            "qr_png_base64": qr_utils.generate_qr_png_data_uri(verify_url),
+            "pdf_url": f"/api/certificates/{record['cert_id']}/pdf",
+            "full_name": record["full_name"],
+            "score": record.get("score"),
+            "total": record.get("total"),
+            "issued_at": record["issued_at"],
+        }
+    )
+
+
 async def download_certificate_pdf(request: Request):
     """GET /api/certificates/{cert_id}/pdf
     Public route — renders and streams the certificate as a downloadable PDF.
@@ -196,5 +238,6 @@ async def verify_certificate(request: Request):
 routes = [
     Route("/generate", generate_certificate, methods=["POST"]),
     Route("/verify", verify_certificate, methods=["GET"]),
+    Route("/mine/{course_id}", get_my_certificate, methods=["GET"]),
     Route("/{cert_id}/pdf", download_certificate_pdf, methods=["GET"]),
 ]
