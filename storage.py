@@ -307,29 +307,8 @@ async def get_certificate_record(cert_id: str) -> Optional[Dict[str, Any]]:
     return dict(row) if row else None
 
 
-async def get_certificate_by_user_course(
-    user_id: int, course_id: str
-) -> Optional[Dict[str, Any]]:
-    """Look up a user's already-issued certificate for a course, if any —
-    used so revisiting the certificate page later doesn't require
-    re-generating (name prompt, quiz re-check) every time."""
-    if USE_SUPABASE:
-        return await asyncio.to_thread(
-            _get_certificate_by_user_course_supabase, user_id, course_id
-        )
-    row = await db.fetchone(
-        "SELECT cert_id, user_id, course_id, course_title, full_name, score, total, "
-        "issued_at FROM certificates WHERE user_id = ? AND course_id = ?",
-        (user_id, course_id),
-    )
-    return dict(row) if row else None
-
-
 async def list_certificates_for_user(user_id: int) -> list[Dict[str, Any]]:
-    """All certificates a user has earned, across every course — one row
-    per (user, course) since that pairing is UNIQUE in the schema, so
-    completing a 2nd, 3rd, 4th course each adds a new certificate rather
-    than replacing the previous one."""
+    """All certificates a user has earned, most recently issued first."""
     if USE_SUPABASE:
         return await asyncio.to_thread(_list_certificates_for_user_supabase, user_id)
     rows = await db.fetchall(
@@ -729,23 +708,10 @@ if USE_SUPABASE:
         )
         return _first(resp)
 
-    def _get_certificate_by_user_course_supabase(
-        user_id: int, course_id: str
-    ) -> Optional[Dict[str, Any]]:
-        resp = (
-            _supabase.from_("certificates")
-            .select("*")
-            .eq("user_id", user_id)
-            .eq("course_id", course_id)
-            .limit(1)
-            .execute()
-        )
-        return _first(resp)
-
     def _list_certificates_for_user_supabase(user_id: int) -> list[Dict[str, Any]]:
         resp = (
             _supabase.from_("certificates")
-            .select("*")
+            .select("cert_id,course_id,course_title,full_name,score,total,issued_at")
             .eq("user_id", user_id)
             .order("issued_at", desc=True)
             .execute()
