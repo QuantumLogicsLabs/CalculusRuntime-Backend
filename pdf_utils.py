@@ -74,13 +74,13 @@ def build_certificate_pdf(
     pdf.set_text_color(*MUTED)
     pdf.cell(297, 8, "This certifies that", align="C")
 
-    # Full name
+    # Full name 
     pdf.set_xy(0, 84)
     pdf.set_font("Helvetica", "B", 26)
     pdf.set_text_color(*GOLD)
     pdf.cell(297, 14, full_name, align="C")
 
-    # Course line
+    # Course line 
     pdf.set_xy(0, 102)
     pdf.set_font("Helvetica", "", 12)
     pdf.set_text_color(*MUTED)
