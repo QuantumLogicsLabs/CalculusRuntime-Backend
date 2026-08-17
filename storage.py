@@ -1,6 +1,7 @@
 import asyncio
 import os
 from typing import Any, Dict, Optional
+from datetime import datetime, timezone
 
 import db
 
@@ -45,6 +46,42 @@ def _data(resp: Any) -> Any:
     return getattr(resp, "data", None)
 
 
+def _parse_completed_at(value: Any) -> Optional[datetime]:
+    if value is None:
+        return None
+
+    if isinstance(value, (int, float)):
+        return datetime.fromtimestamp(value, timezone.utc)
+
+    if isinstance(value, str):
+        try:
+            numeric = int(value)
+            return datetime.fromtimestamp(numeric, timezone.utc)
+        except ValueError:
+            pass
+
+        try:
+            dt = datetime.fromisoformat(value)
+            return dt.astimezone(timezone.utc) if dt.tzinfo else dt.replace(tzinfo=timezone.utc)
+        except ValueError:
+            return None
+
+    return None
+
+
+def _review_metadata_for_completed_at(value: Any) -> Dict[str, Any]:
+    completed_dt = _parse_completed_at(value)
+    if not completed_dt:
+        return {"needs_review": False, "days_since_completion": 0}
+
+    now = datetime.now(timezone.utc)
+    days = int((now - completed_dt).total_seconds() // 86400)
+    return {
+    "needs_review": days >= 14,
+    "days_since_completion": days,
+}
+ 
+
 async def init_storage() -> None:
     if USE_SUPABASE:
         return None
@@ -82,16 +119,25 @@ async def get_progress(user_id: int) -> Dict[str, Any]:
     return await _get_progress_sqlite(user_id)
 
 
-async def mark_section_complete(user_id: int, section_id: str) -> None:
+async def mark_section_complete(user_id: int, section_id: str) -> Optional[int]:
     if USE_SUPABASE:
         return await asyncio.to_thread(
             _mark_section_complete_supabase, user_id, section_id
         )
+    # Stale JWTs can reference deleted users — fail cleanly instead of FK 500.
+    profile = await db.fetchone("SELECT id FROM users WHERE id = ?", (user_id,))
+    if not profile:
+        raise PermissionError("User not found")
     await db.execute(
         "INSERT INTO sections (user_id, section_id) VALUES (?, ?) "
-        "ON CONFLICT(user_id, section_id) DO UPDATE SET completed=1",
+        "ON CONFLICT(user_id, section_id) DO UPDATE SET completed=1, completed_at=strftime('%s','now')",
         (user_id, section_id),
     )
+    row = await db.fetchone(
+        "SELECT completed_at FROM sections WHERE user_id = ? AND section_id = ?",
+        (user_id, section_id),
+    )
+    return int(row["completed_at"]) if row and row.get("completed_at") is not None else None
 
 
 async def unmark_section_complete(user_id: int, section_id: str) -> None:
@@ -166,6 +212,176 @@ async def save_quiz_score(user_id: int, quiz_id: str, score: int, total: int) ->
     )
 
 
+# ── Quiz attempt history (every attempt, never overwritten) ───────────────────
+
+
+async def record_quiz_attempt(
+    user_id: int, quiz_id: str, score: int, total: int, passed: bool
+) -> None:
+    if USE_SUPABASE:
+        return await asyncio.to_thread(
+            _record_quiz_attempt_supabase, user_id, quiz_id, score, total, passed
+        )
+    await db.execute(
+        "INSERT INTO quiz_attempts (user_id, quiz_id, score, total, passed) "
+        "VALUES (?, ?, ?, ?, ?)",
+        (user_id, quiz_id, score, total, 1 if passed else 0),
+    )
+
+
+async def list_quiz_attempts(
+    user_id: int, quiz_id: Optional[str] = None
+) -> list[Dict[str, Any]]:
+    if USE_SUPABASE:
+        return await asyncio.to_thread(_list_quiz_attempts_supabase, user_id, quiz_id)
+    if quiz_id:
+        rows = await db.fetchall(
+            "SELECT quiz_id, score, total, passed, attempted_at FROM quiz_attempts "
+            "WHERE user_id = ? AND quiz_id = ? ORDER BY attempted_at DESC",
+            (user_id, quiz_id),
+        )
+    else:
+        rows = await db.fetchall(
+            "SELECT quiz_id, score, total, passed, attempted_at FROM quiz_attempts "
+            "WHERE user_id = ? ORDER BY attempted_at DESC",
+            (user_id,),
+        )
+    return [
+        {
+            "quizId": r["quiz_id"],
+            "score": r["score"],
+            "total": r["total"],
+            "passed": bool(r["passed"]),
+            "attemptedAt": r["attempted_at"],
+        }
+        for r in rows
+    ]
+
+
+# ── Certificates (permanent record, one per user+course) ──────────────────────
+
+
+async def save_certificate_record(
+    cert_id: str,
+    user_id: int,
+    course_id: str,
+    course_title: str,
+    full_name: str,
+    score: Optional[int],
+    total: Optional[int],
+) -> Dict[str, Any]:
+    if USE_SUPABASE:
+        return await asyncio.to_thread(
+            _save_certificate_record_supabase,
+            cert_id, user_id, course_id, course_title, full_name, score, total,
+        )
+    existing = await db.fetchone(
+        "SELECT cert_id FROM certificates WHERE user_id = ? AND course_id = ?",
+        (user_id, course_id),
+    )
+    if existing:
+        await db.execute(
+            "UPDATE certificates SET full_name = ?, score = ?, total = ? "
+            "WHERE user_id = ? AND course_id = ?",
+            (full_name, score, total, user_id, course_id),
+        )
+        cert_id = existing["cert_id"]
+    else:
+        await db.execute(
+            "INSERT INTO certificates "
+            "(cert_id, user_id, course_id, course_title, full_name, score, total) "
+            "VALUES (?, ?, ?, ?, ?, ?, ?)",
+            (cert_id, user_id, course_id, course_title, full_name, score, total),
+        )
+    return await get_certificate_record(cert_id)
+
+
+async def get_certificate_record(cert_id: str) -> Optional[Dict[str, Any]]:
+    if USE_SUPABASE:
+        return await asyncio.to_thread(_get_certificate_record_supabase, cert_id)
+    row = await db.fetchone(
+        "SELECT cert_id, user_id, course_id, course_title, full_name, score, total, "
+        "issued_at FROM certificates WHERE cert_id = ?",
+        (cert_id,),
+    )
+    return dict(row) if row else None
+
+
+async def list_certificates_for_user(user_id: int) -> list[Dict[str, Any]]:
+    """All certificates a user has earned, most recently issued first."""
+    if USE_SUPABASE:
+        return await asyncio.to_thread(_list_certificates_for_user_supabase, user_id)
+    rows = await db.fetchall(
+        "SELECT cert_id, course_id, course_title, full_name, score, total, issued_at "
+        "FROM certificates WHERE user_id = ? ORDER BY issued_at DESC",
+        (user_id,),
+    )
+    return [dict(r) for r in rows]
+
+
+async def get_leaderboard_opt_in(user_id: int) -> bool:
+    if USE_SUPABASE:
+        try:
+            return await asyncio.to_thread(_get_leaderboard_opt_in_supabase, user_id)
+        except Exception:
+            return False
+    row = await db.fetchone(
+        "SELECT leaderboard_opt_in FROM user_prefs WHERE user_id = ?",
+        (user_id,),
+    )
+    return bool(row and row["leaderboard_opt_in"])
+
+
+async def set_leaderboard_opt_in(user_id: int, opt_in: bool) -> bool:
+    value = 1 if opt_in else 0
+    if USE_SUPABASE:
+        try:
+            await asyncio.to_thread(_set_leaderboard_opt_in_supabase, user_id, bool(opt_in))
+        except Exception:
+            pass
+        return bool(opt_in)
+    await db.execute(
+        "INSERT INTO user_prefs (user_id, leaderboard_opt_in) VALUES (?, ?) "
+        "ON CONFLICT(user_id) DO UPDATE SET leaderboard_opt_in = excluded.leaderboard_opt_in",
+        (user_id, value),
+    )
+    return bool(opt_in)
+
+
+def _leaderboard_entry(
+    user_id: int, username: str, topics: Any, quiz_count: Any, quiz_pct: Any
+) -> Dict[str, Any]:
+    return {
+        "userId": int(user_id),
+        "label": username or "Unknown",
+        "topics": int(topics or 0),
+        "quizCount": int(quiz_count or 0),
+        "quizPct": int(round(quiz_pct or 0)),
+    }
+
+
+async def get_leaderboard() -> list[Dict[str, Any]]:
+    """Stats for every user who opted in to the leaderboard."""
+    if USE_SUPABASE:
+        return await asyncio.to_thread(_get_leaderboard_supabase)
+    rows = await db.fetchall(
+        "SELECT u.id AS user_id, u.username, "
+        "  (SELECT COUNT(*) FROM sections s WHERE s.user_id = u.id AND s.completed = 1) AS topics, "
+        "  (SELECT COUNT(*) FROM quiz_scores q WHERE q.user_id = u.id) AS quiz_count, "
+        "  (SELECT AVG(q.score * 100.0 / q.total) FROM quiz_scores q "
+        "     WHERE q.user_id = u.id AND q.total > 0) AS quiz_pct "
+        "FROM users u "
+        "JOIN user_prefs p ON p.user_id = u.id "
+        "WHERE p.leaderboard_opt_in = 1"
+    )
+    return [
+        _leaderboard_entry(
+            row["user_id"], row["username"], row["topics"], row["quiz_count"], row["quiz_pct"]
+        )
+        for row in rows
+    ]
+
+
 async def log_solver_use(
     user_id: Optional[int], expression: Optional[str], result: Optional[str]
 ) -> None:
@@ -193,7 +409,8 @@ async def list_solver_history(user_id: int) -> list[Dict[str, Any]]:
 
 async def _get_progress_sqlite(user_id: int) -> Dict[str, Any]:
     section_rows = await db.fetchall(
-        "SELECT section_id FROM sections WHERE user_id = ?", (user_id,)
+        "SELECT section_id, completed_at FROM sections WHERE user_id = ?",
+        (user_id,),
     )
     solver_count = (
         await db.scalar(
@@ -204,9 +421,20 @@ async def _get_progress_sqlite(user_id: int) -> Dict[str, Any]:
 
     return {
         "completedSections": {row["section_id"]: True for row in section_rows},
+        "completedSectionTimestamps": {
+            row["section_id"]: row["completed_at"]
+            for row in section_rows
+            if row.get("completed_at") is not None
+        },
+        "completedSectionMetadata": {
+            row["section_id"]: _review_metadata_for_completed_at(row["completed_at"])
+            for row in section_rows
+            if row.get("completed_at") is not None
+        },
         "quizScores": await list_quiz_scores(user_id),
         "bookmarks": await list_bookmarks(user_id),
         "solverUses": solver_count,
+        "leaderboardOptIn": await get_leaderboard_opt_in(user_id),
     }
 
 
@@ -259,7 +487,7 @@ if USE_SUPABASE:
     def _get_progress_supabase(user_id: int) -> Dict[str, Any]:
         section_resp = (
             _supabase.from_("sections")
-            .select("section_id")
+            .select("section_id,completed_at")
             .eq("user_id", user_id)
             .execute()
         )
@@ -276,21 +504,40 @@ if USE_SUPABASE:
             "completedSections": {
                 row["section_id"]: True for row in section_rows
             },
+            "completedSectionTimestamps": {
+                row["section_id"]: row.get("completed_at")
+                for row in section_rows
+                if row.get("completed_at") is not None
+            },
+            "completedSectionMetadata": {
+                row["section_id"]: _review_metadata_for_completed_at(row.get("completed_at"))
+                for row in section_rows
+                if row.get("completed_at") is not None
+            },
             "quizScores": _list_quiz_scores_supabase(user_id),
             "bookmarks": _list_bookmarks_supabase(user_id),
             "solverUses": getattr(solver_resp, "count", 0) or 0,
+            "leaderboardOptIn": _get_leaderboard_opt_in_supabase(user_id),
         }
 
-    def _mark_section_complete_supabase(user_id: int, section_id: str) -> None:
+    def _mark_section_complete_supabase(user_id: int, section_id: str) -> Optional[int]:
+        # Ensure completed_at is set/updated to current UTC time on upsert
+        now_iso = datetime.utcnow().isoformat()
         resp = (
             _supabase.from_("sections")
             .upsert(
-                {"user_id": user_id, "section_id": section_id, "completed": True},
+                {
+                    "user_id": user_id,
+                    "section_id": section_id,
+                    "completed": True,
+                    "completed_at": now_iso,
+                },
                 on_conflict="user_id,section_id",
             )
             .execute()
         )
         _data(resp)
+        return now_iso
 
     def _unmark_section_complete_supabase(user_id: int, section_id: str) -> None:
         resp = (
@@ -376,6 +623,101 @@ if USE_SUPABASE:
         )
         _data(resp)
 
+    def _record_quiz_attempt_supabase(
+        user_id: int, quiz_id: str, score: int, total: int, passed: bool
+    ) -> None:
+        resp = (
+            _supabase.from_("quiz_attempts")
+            .insert(
+                {
+                    "user_id": user_id,
+                    "quiz_id": quiz_id,
+                    "score": score,
+                    "total": total,
+                    "passed": passed,
+                }
+            )
+            .execute()
+        )
+        _data(resp)
+
+    def _list_quiz_attempts_supabase(
+        user_id: int, quiz_id: Optional[str]
+    ) -> list[Dict[str, Any]]:
+        query = _supabase.from_("quiz_attempts").select("*").eq("user_id", user_id)
+        if quiz_id:
+            query = query.eq("quiz_id", quiz_id)
+        resp = query.order("attempted_at", desc=True).execute()
+        rows = _data(resp) or []
+        return [
+            {
+                "quizId": row["quiz_id"],
+                "score": row["score"],
+                "total": row["total"],
+                "passed": bool(row["passed"]),
+                "attemptedAt": row["attempted_at"],
+            }
+            for row in rows
+        ]
+
+    def _save_certificate_record_supabase(
+        cert_id: str,
+        user_id: int,
+        course_id: str,
+        course_title: str,
+        full_name: str,
+        score: Optional[int],
+        total: Optional[int],
+    ) -> Dict[str, Any]:
+        existing_resp = (
+            _supabase.from_("certificates")
+            .select("cert_id")
+            .eq("user_id", user_id)
+            .eq("course_id", course_id)
+            .limit(1)
+            .execute()
+        )
+        existing = _first(existing_resp)
+        row_cert_id = existing["cert_id"] if existing else cert_id
+        resp = (
+            _supabase.from_("certificates")
+            .upsert(
+                {
+                    "cert_id": row_cert_id,
+                    "user_id": user_id,
+                    "course_id": course_id,
+                    "course_title": course_title,
+                    "full_name": full_name,
+                    "score": score,
+                    "total": total,
+                },
+                on_conflict="user_id,course_id",
+            )
+            .execute()
+        )
+        _data(resp)
+        return _get_certificate_record_supabase(row_cert_id)
+
+    def _get_certificate_record_supabase(cert_id: str) -> Optional[Dict[str, Any]]:
+        resp = (
+            _supabase.from_("certificates")
+            .select("*")
+            .eq("cert_id", cert_id)
+            .limit(1)
+            .execute()
+        )
+        return _first(resp)
+
+    def _list_certificates_for_user_supabase(user_id: int) -> list[Dict[str, Any]]:
+        resp = (
+            _supabase.from_("certificates")
+            .select("cert_id,course_id,course_title,full_name,score,total,issued_at")
+            .eq("user_id", user_id)
+            .order("issued_at", desc=True)
+            .execute()
+        )
+        return _data(resp) or []
+
     def _log_solver_use_supabase(
         user_id: int, expression: Optional[str], result: Optional[str]
     ) -> None:
@@ -398,3 +740,85 @@ if USE_SUPABASE:
             .execute()
         )
         return _data(resp) or []
+
+    def _get_leaderboard_supabase() -> list[Dict[str, Any]]:
+        prefs_resp = (
+            _supabase.from_("user_prefs")
+            .select("user_id")
+            .eq("leaderboard_opt_in", True)
+            .execute()
+        )
+        user_ids = [row["user_id"] for row in (_data(prefs_resp) or [])]
+        if not user_ids:
+            return []
+
+        users_resp = (
+            _supabase.from_("users")
+            .select("id,username")
+            .in_("id", user_ids)
+            .execute()
+        )
+        usernames = {row["id"]: row["username"] for row in (_data(users_resp) or [])}
+
+        sections_resp = (
+            _supabase.from_("sections")
+            .select("user_id")
+            .in_("user_id", user_ids)
+            .eq("completed", True)
+            .execute()
+        )
+        topic_counts: Dict[int, int] = {}
+        for row in _data(sections_resp) or []:
+            topic_counts[row["user_id"]] = topic_counts.get(row["user_id"], 0) + 1
+
+        quiz_resp = (
+            _supabase.from_("quiz_scores")
+            .select("user_id,score,total")
+            .in_("user_id", user_ids)
+            .execute()
+        )
+        quiz_pcts: Dict[int, list] = {}
+        for row in _data(quiz_resp) or []:
+            if row.get("total"):
+                quiz_pcts.setdefault(row["user_id"], []).append(
+                    row["score"] * 100.0 / row["total"]
+                )
+
+        entries = []
+        for uid in user_ids:
+            pcts = quiz_pcts.get(uid, [])
+            entries.append(
+                _leaderboard_entry(
+                    uid,
+                    usernames.get(uid, "?"),
+                    topic_counts.get(uid, 0),
+                    len(pcts),
+                    sum(pcts) / len(pcts) if pcts else 0,
+                )
+            )
+        return entries
+
+    def _get_leaderboard_opt_in_supabase(user_id: int) -> bool:
+        try:
+            resp = (
+                _supabase.from_("user_prefs")
+                .select("leaderboard_opt_in")
+                .eq("user_id", user_id)
+                .limit(1)
+                .execute()
+            )
+            row = _first(resp)
+            return bool(row and row.get("leaderboard_opt_in"))
+        except Exception:
+            return False
+
+    def _set_leaderboard_opt_in_supabase(user_id: int, opt_in: bool) -> None:
+        resp = (
+            _supabase.from_("user_prefs")
+            .upsert(
+                {"user_id": user_id, "leaderboard_opt_in": bool(opt_in)},
+                on_conflict="user_id",
+            )
+            .execute()
+        )
+        _data(resp)
