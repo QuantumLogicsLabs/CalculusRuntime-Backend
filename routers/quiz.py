@@ -21,9 +21,9 @@ from starlette.routing import Route
 from starlette.requests import Request
 from starlette.responses import JSONResponse
 
-import storage
-from auth_utils import require_user, err, SECRET_KEY, ALGORITHM
-from quiz_bank import get_quiz, QUIZ_BANK
+from core import storage
+from core.auth_utils import require_user, err, SECRET_KEY, ALGORITHM
+from core.quiz_bank import get_quiz, QUIZ_BANK
 
 ATTEMPT_TOKEN_TYP = "quiz_attempt"
 SECONDS_PER_QUESTION = 40

@@ -60,16 +60,24 @@ No FastAPI. No Pydantic. No ORM. No `python-dotenv`. Just clean async Python and
 ```
 backend/
 ├── main.py               # App entry point, routing, CORS, lifespan
-├── auth_utils.py         # JWT creation/decoding, bcrypt hashing, request helpers
-├── storage.py            # Unified async storage layer (SQLite ↔ Supabase)
-├── db.py                 # Raw SQLite helpers wrapped in asyncio.to_thread
-├── progress_store.py     # Progress-specific storage logic
+├── core/
+│   ├── auth_utils.py     # JWT creation/decoding, bcrypt hashing, request helpers
+│   ├── storage.py        # Unified async storage layer (SQLite ↔ Supabase)
+│   ├── db.py             # Raw SQLite helpers wrapped in asyncio.to_thread
+│   ├── pdf_utils.py      # Certificate PDF rendering
+│   ├── qr_utils.py       # Certificate QR code generation
+│   └── quiz_bank.py      # Server-side certification quiz question bank
 ├── routers/
 │   ├── auth.py           # POST /signup, POST /login, GET /me
 │   ├── progress.py       # GET /, POST /section/complete, DELETE /section/{id}
 │   ├── bookmarks.py      # GET /, POST /, DELETE /{id}
 │   ├── quiz.py           # GET /, POST /
-│   └── solver_proxy.py   # POST /log, GET /history
+│   ├── solver_proxy.py   # POST /log, GET /history
+│   ├── certificates.py   # POST /generate, GET /verify
+│   └── verification.py   # POST /api/verify-course
+├── services/
+│   └── course_verification.py
+├── docs/                 # Architecture, setup, and workflow docs
 ├── supabase_schema.sql   # Schema + RLS setup for Supabase
 ├── requirements.txt
 └── .env.example

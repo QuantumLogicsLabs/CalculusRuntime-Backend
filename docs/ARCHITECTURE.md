@@ -25,10 +25,10 @@ routers/*
   -> parse JSON
   -> authenticate when needed
   -> validate required fields
-  -> call storage.py
+  -> call core/storage.py
 
-storage.py
-  -> SQLite via db.py
+core/storage.py
+  -> SQLite via core/db.py
   -> or Supabase client when configured
 ```
 
@@ -54,11 +54,11 @@ Routes are mounted by API area:
 | `/api/quiz` | `routers/quiz.py` |
 | `/api/solver` | `routers/solver_proxy.py` |
 
-Each router returns `JSONResponse` directly and uses `auth_utils.err()` for common error payloads.
+Each router returns `JSONResponse` directly and uses `core.auth_utils.err()` for common error payloads.
 
 ## Storage Abstraction
 
-`storage.py` chooses the backend at import time:
+`core/storage.py` chooses the backend at import time:
 
 - SQLite when Supabase is not configured.
 - Supabase when `DB_BACKEND=supabase`, `DATABASE_BACKEND=supabase`, `PROGRESS_DB=supabase`, or both `SUPABASE_URL` and a Supabase key are present.

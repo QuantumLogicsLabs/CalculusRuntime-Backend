@@ -4,8 +4,8 @@ from starlette.routing import Route
 from starlette.requests import Request
 from starlette.responses import JSONResponse
 
-import storage
-from auth_utils import hash_password, verify_password, create_token, require_user, err
+from core import storage
+from core.auth_utils import hash_password, verify_password, create_token, require_user, err
 
 
 def storage_err(exc: Exception):
