@@ -16,14 +16,14 @@ The backend supports two storage modes:
 
 | Mode | Activation | Code path |
 | --- | --- | --- |
-| SQLite | Default | `db.py` through `storage.py` |
-| Supabase | `DB_BACKEND=supabase`, `DATABASE_BACKEND=supabase`, `PROGRESS_DB=supabase`, or Supabase URL/key present | Supabase client through `storage.py` |
+| SQLite | Default | `core/db.py` through `core/storage.py` |
+| Supabase | `DB_BACKEND=supabase`, `DATABASE_BACKEND=supabase`, `PROGRESS_DB=supabase`, or Supabase URL/key present | Supabase client through `core/storage.py` |
 
 SQLite creates the schema on startup. Supabase requires applying `supabase_schema.sql` before starting the service.
 
 ## SQLite Schema
 
-Defined in `db.py`.
+Defined in `core/db.py`.
 
 | Table | Key fields | Purpose |
 | --- | --- | --- |

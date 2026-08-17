@@ -525,7 +525,7 @@ source .venv/bin/activate</pre>
         <div class="section-body">
 
           <h3 id="db-sqlite" style="font-size:14px; font-weight:600; margin-bottom:6px; color:var(--text);">SQLite (default — no extra steps)</h3>
-          <p>On first startup <code>db.py</code> runs <code>CREATE TABLE IF NOT EXISTS</code> for all five tables automatically. No manual migration needed. The database file appears at the path set by <code>DB_PATH</code> (default: <code>calcvoyager.db</code>).</p>
+          <p>On first startup <code>core/db.py</code> runs <code>CREATE TABLE IF NOT EXISTS</code> for all five tables automatically. No manual migration needed. The database file appears at the path set by <code>DB_PATH</code> (default: <code>calcvoyager.db</code>).</p>
 
           <div class="callout callout-ok" style="margin:0.75rem 0;">
             <span class="callout-icon">✓</span>
@@ -720,7 +720,7 @@ $token = $resp.access_token</pre>
           <div class="trouble-item">
             <div class="trouble-symptom">Syntax check before a PR</div>
             <div class="trouble-cause">Catching import or syntax errors early.</div>
-            <div class="trouble-fix"><code>python -m py_compile main.py auth_utils.py db.py storage.py routers/*.py</code></div>
+            <div class="trouble-fix"><code>python -m py_compile main.py core/*.py routers/*.py</code></div>
           </div>
         </div>
       </section>

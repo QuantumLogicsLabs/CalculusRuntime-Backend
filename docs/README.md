@@ -29,7 +29,7 @@ The backend is the CalcVoyager persistence API. It owns user accounts, JWT authe
 | Server | Uvicorn |
 | Persistence | SQLite by default; Supabase when configured |
 | Auth | bcrypt password hashing + PyJWT bearer tokens |
-| Schema owner | `db.py` for SQLite, `supabase_schema.sql` for Supabase |
+| Schema owner | `core/db.py` for SQLite, `supabase_schema.sql` for Supabase |
 | API docs | Custom HTML at `/docs` |
 | Health check | `GET /api/health` |
 
@@ -38,11 +38,14 @@ The backend is the CalcVoyager persistence API. It owns user accounts, JWT authe
 | Path | Responsibility |
 | --- | --- |
 | `main.py` | App creation, CORS, routes, startup, HTML docs |
-| `auth_utils.py` | Password hashing, JWT creation/decoding, request auth helpers |
-| `db.py` | SQLite schema and async wrappers around blocking `sqlite3` calls |
-| `storage.py` | Storage abstraction for SQLite and Supabase |
-| `progress_store.py` | Compatibility exports for progress routes |
+| `core/auth_utils.py` | Password hashing, JWT creation/decoding, request auth helpers |
+| `core/db.py` | SQLite schema and async wrappers around blocking `sqlite3` calls |
+| `core/storage.py` | Storage abstraction for SQLite and Supabase |
+| `core/pdf_utils.py` | Certificate PDF rendering |
+| `core/qr_utils.py` | Certificate QR code generation |
+| `core/quiz_bank.py` | Server-side certification quiz question bank |
 | `routers/` | Route handlers grouped by API area |
+| `services/` | Cross-cutting business logic used by routers |
 | `supabase_schema.sql` | Supabase table definitions and indexes |
 | `.env.example` | Local and production environment variable reference |
 

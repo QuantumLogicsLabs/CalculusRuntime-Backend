@@ -35,7 +35,7 @@ uvicorn main:app --reload --port 8002
 | Command | Purpose |
 | --- | --- |
 | `uvicorn main:app --reload --port 8002` | Run local backend |
-| `python -m py_compile main.py auth_utils.py db.py storage.py routers/*.py` | Syntax check |
+| `python -m py_compile main.py core/*.py routers/*.py` | Syntax check |
 | `curl http://127.0.0.1:8002/api/health` | Health check |
 | `sqlite3 calcvoyager.db .schema` | Inspect local SQLite schema |
 
@@ -61,7 +61,7 @@ Before opening a backend PR:
 
 ```bash
 cd backend
-python -m py_compile main.py auth_utils.py db.py storage.py routers/*.py
+python -m py_compile main.py core/*.py routers/*.py
 uvicorn main:app --reload --port 8002
 ```
 

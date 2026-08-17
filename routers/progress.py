@@ -5,14 +5,14 @@ from starlette.requests import Request
 from starlette.responses import JSONResponse
 from datetime import datetime
 
-from storage import (
+from core.storage import (
     get_progress,
     get_leaderboard,
     mark_section_complete,
     unmark_section_complete,
     set_leaderboard_opt_in,
 )
-from auth_utils import require_user, err
+from core.auth_utils import require_user, err
 
 ALL_TOPICS = [
     "partial-derivatives",

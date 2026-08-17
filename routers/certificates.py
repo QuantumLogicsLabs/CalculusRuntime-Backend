@@ -21,10 +21,10 @@ from starlette.routing import Route
 from starlette.requests import Request
 from starlette.responses import JSONResponse, Response
 
-from auth_utils import require_user, err, SECRET_KEY, ALGORITHM
-import qr_utils
-import pdf_utils
-import storage
+from core.auth_utils import require_user, err, SECRET_KEY, ALGORITHM
+from core import qr_utils
+from core import pdf_utils
+from core import storage
 
 CERT_TOKEN_EXPIRE_DAYS = int(os.getenv("CERT_TOKEN_EXPIRE_DAYS", "3650"))
 FRONTEND_VERIFY_URL = os.getenv(
