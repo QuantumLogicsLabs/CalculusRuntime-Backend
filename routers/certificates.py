@@ -34,6 +34,23 @@ FRONTEND_VERIFY_URL = os.getenv(
 DEFAULT_MIN_QUIZ_SCORE = 80
 
 
+def _normalize_issued_at(issued_at):
+    """Convert Supabase timestamptz / ISO string / datetime into Unix epoch int."""
+    if issued_at is None:
+        return int(datetime.now(timezone.utc).timestamp())
+    if isinstance(issued_at, (int, float)):
+        return int(issued_at)
+    if isinstance(issued_at, datetime):
+        return int(issued_at.timestamp())
+    # ISO string
+    s = str(issued_at).replace("Z", "+00:00")
+    try:
+        dt = datetime.fromisoformat(s)
+        return int(dt.timestamp())
+    except Exception:
+        return int(datetime.now(timezone.utc).timestamp())
+
+
 def _sign_certificate(
     cert_id: str, user_id: int, full_name: str, course_id: str, course_title: str
 ) -> str:
@@ -164,6 +181,9 @@ async def download_certificate_pdf(request: Request):
     if not record:
         return err(404, "Certificate not found.")
 
+    # Normalize issued_at so PDF generation never crashes on Supabase strings
+    issued_at = _normalize_issued_at(record.get("issued_at"))
+
     token = _sign_certificate(
         record["cert_id"],
         record["user_id"],
@@ -178,7 +198,7 @@ async def download_certificate_pdf(request: Request):
         full_name=record["full_name"],
         course_title=record["course_title"],
         cert_id=record["cert_id"],
-        issued_at_epoch=record["issued_at"],
+        issued_at_epoch=issued_at,
         verify_url=verify_url,
         qr_png_bytes=qr_bytes,
         score=record.get("score"),

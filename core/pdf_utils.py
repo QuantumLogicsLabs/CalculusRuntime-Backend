@@ -7,6 +7,7 @@ this matters because this backend gets deployed to small containers).
 
 import io
 from datetime import datetime, timezone
+from typing import Optional, Union
 
 from fpdf import FPDF
 
@@ -21,8 +22,27 @@ ORG_NAME = "CalcVoyager"
 MENTOR_NAME = "Course Mentor, CalcVoyager"
 
 
-def _fmt_date(issued_at_epoch: int) -> str:
-    dt = datetime.fromtimestamp(issued_at_epoch, tz=timezone.utc)
+def _fmt_date(issued_at: Union[int, float, str, datetime, None]) -> str:
+    """Accept epoch int/float, datetime, or ISO string and return a nice date.
+    Handles Supabase timestamptz which comes back as ISO strings.
+    """
+    if issued_at is None:
+        return "—"
+
+    if isinstance(issued_at, (int, float)):
+        dt = datetime.fromtimestamp(issued_at, tz=timezone.utc)
+    elif isinstance(issued_at, datetime):
+        dt = issued_at if issued_at.tzinfo else issued_at.replace(tzinfo=timezone.utc)
+    else:
+        # ISO string from Supabase (e.g. "2026-08-18T12:34:56.789123+00:00")
+        s = str(issued_at).replace("Z", "+00:00")
+        try:
+            dt = datetime.fromisoformat(s)
+        except ValueError:
+            return str(issued_at)
+        if dt.tzinfo is None:
+            dt = dt.replace(tzinfo=timezone.utc)
+
     return dt.strftime("%B %d, %Y")
 
 
@@ -31,11 +51,11 @@ def build_certificate_pdf(
     full_name: str,
     course_title: str,
     cert_id: str,
-    issued_at_epoch: int,
+    issued_at_epoch,  # can be int, float, str, or datetime
     verify_url: str,
     qr_png_bytes: bytes,
-    score: int | None = None,
-    total: int | None = None,
+    score: Optional[int] = None,
+    total: Optional[int] = None,
 ) -> bytes:
     """Render a single-page landscape PDF certificate. Returns raw PDF bytes."""
     pdf = FPDF(orientation="L", unit="mm", format="A4")
@@ -51,8 +71,7 @@ def build_certificate_pdf(
     pdf.set_line_width(0.3)
     pdf.rect(11, 11, 275, 188)
 
-    # Org "logo" (text mark — swap for pdf.image(logo_path, ...) if a real
-    # logo file is added later, e.g. assets/logo.png)
+    # Org "logo" (text mark)
     pdf.set_xy(0, 20)
     pdf.set_font("Helvetica", "B", 16)
     pdf.set_text_color(*GOLD)
@@ -74,13 +93,13 @@ def build_certificate_pdf(
     pdf.set_text_color(*MUTED)
     pdf.cell(297, 8, "This certifies that", align="C")
 
-    # Full name 
+    # Full name
     pdf.set_xy(0, 84)
     pdf.set_font("Helvetica", "B", 26)
     pdf.set_text_color(*GOLD)
     pdf.cell(297, 14, full_name, align="C")
 
-    # Course line 
+    # Course line
     pdf.set_xy(0, 102)
     pdf.set_font("Helvetica", "", 12)
     pdf.set_text_color(*MUTED)
