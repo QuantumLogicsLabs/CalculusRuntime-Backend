@@ -235,6 +235,7 @@ _DEFAULT_ORIGINS = (
     "http://localhost:3001,http://127.0.0.1:3001,"
     "http://localhost:5173,http://127.0.0.1:5173,"
     "https://calculus-runtime-frontend-ten.vercel.app,"
+    "https://calculus-runtime-frontend-lyart.vercel.app,"
     "https://calculus.quantumlogiclimited.com"
 )
 _EXTRA_ORIGINS = os.getenv("ALLOWED_ORIGINS", "")
