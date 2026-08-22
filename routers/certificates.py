@@ -29,7 +29,7 @@ from core import storage
 CERT_TOKEN_EXPIRE_DAYS = int(os.getenv("CERT_TOKEN_EXPIRE_DAYS", "3650"))
 FRONTEND_VERIFY_URL = os.getenv(
     "FRONTEND_VERIFY_URL",
-    "https://calculus-runtime-frontend-ten.vercel.app/verify",
+    "https://calculus-runtime-frontend-lyart.vercel.app/verify",
 )
 DEFAULT_MIN_QUIZ_SCORE = 80
 
