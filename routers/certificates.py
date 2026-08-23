@@ -172,6 +172,33 @@ async def list_my_certificates(request: Request):
     )
 
 
+async def get_my_certificate_for_course(request: Request):
+    """GET /api/certificates/mine/{course_id}
+    🔒 Requires auth. Returns existing certificate for a specific course if earned, else 404.
+    """
+    user_id = require_user(request)
+    if not user_id:
+        return err(401, "Not authenticated.")
+
+    course_id = request.path_params.get("course_id", "")
+    records = await storage.list_certificates_for_user(user_id)
+    for r in records:
+        if r.get("course_id") == course_id:
+            return JSONResponse(
+                {
+                    "cert_id": r["cert_id"],
+                    "course_id": r["course_id"],
+                    "course_title": r["course_title"],
+                    "full_name": r["full_name"],
+                    "score": r.get("score"),
+                    "total": r.get("total"),
+                    "issued_at": r["issued_at"],
+                    "pdf_url": f"/api/certificates/{r['cert_id']}/pdf",
+                }
+            )
+    return err(404, "No certificate found for this course.")
+
+
 async def download_certificate_pdf(request: Request):
     """GET /api/certificates/{cert_id}/pdf
     Public route — renders and streams the certificate as a downloadable PDF.
@@ -243,6 +270,7 @@ async def verify_certificate(request: Request):
 routes = [
     Route("/generate", generate_certificate, methods=["POST"]),
     Route("/mine", list_my_certificates, methods=["GET"]),
+    Route("/mine/{course_id}", get_my_certificate_for_course, methods=["GET"]),
     Route("/verify", verify_certificate, methods=["GET"]),
     Route("/{cert_id}/pdf", download_certificate_pdf, methods=["GET"]),
 ]

@@ -6,8 +6,12 @@ this matters because this backend gets deployed to small containers).
 """
 
 import io
+import warnings
 from datetime import datetime, timezone
 from typing import Optional, Union
+
+# Suppress harmless namespace warning if fpdf2 is imported in env with legacy packages
+warnings.filterwarnings("ignore", category=UserWarning, module="fpdf")
 
 from fpdf import FPDF
 

@@ -6,8 +6,12 @@ No pydantic, no aiosqlite, no SQLAlchemy.
 
 import os
 import sys
+import warnings
 from contextlib import asynccontextmanager
 from pathlib import Path
+
+# Suppress harmless namespace warning if fpdf2 is imported in env with legacy packages
+warnings.filterwarnings("ignore", category=UserWarning, module="fpdf")
 
 from starlette.applications import Starlette
 from starlette.middleware import Middleware
@@ -31,7 +35,7 @@ from routers.progress import routes as progress_routes
 from routers.bookmarks import routes as bookmark_routes
 from routers.quiz import routes as quiz_routes
 from routers.solver_proxy import routes as solver_routes
-from routers.certificates import routes as certificate_routes
+from routers.certificates import routes as certificate_routes, list_my_certificates
 from routers.verification import routes as verification_routes
 
 # Calculus AI Chatbot routes (submodule) — serves /api/chat/*
@@ -250,6 +254,10 @@ _routes = [
     Route("/docs", docs),
     Route("/favicon.ico", favicon),
     Route("/api/health", health),
+    Route("/health", health),
+    Route("/healthz", health),
+    Route("/actuator/health", health),
+    Route("/mine", list_my_certificates, methods=["GET"]),
     Mount("/api/auth", routes=auth_routes),
     Mount("/api/progress", routes=progress_routes),
     Mount("/api/bookmarks", routes=bookmark_routes),
@@ -268,9 +276,10 @@ app = Starlette(
         Middleware(
             CORSMiddleware,
             allow_origins=ALLOWED_ORIGINS,
+            allow_origin_regex=r"^https?://.*",
             allow_credentials=True,
-            allow_methods=["GET", "POST", "PUT", "DELETE", "OPTIONS", "PATCH"],
-            allow_headers=["Authorization", "Content-Type", "Accept", "Origin", "X-Requested-With"],
+            allow_methods=["*"],
+            allow_headers=["*"],
         )
     ],
     lifespan=lifespan,
