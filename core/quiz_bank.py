@@ -6,10 +6,11 @@ correct answer for every question. Only /api/quiz/<id>/start (which strips
 answers and shuffles order) and /api/quiz/<id>/submit (which grades against
 this bank server-side) may read from it.
 
-Mirrors frontend/src/data/courseQuizzes.js — keep both in sync when editing
-questions. The frontend copy is being phased out of the certification-quiz
-flow (kept only as a fallback/reference); this file is the source of truth.
+This is the source of truth for live certificates. The historical frontend
+courseQuizzes.js reference is not used by the server-authoritative quiz flow.
+New certificate answer keys remain on the server.
 """
+
 
 QUIZ_BANK = {'quiz-calculus-analytical-geometry': {'title': 'Calculus & Analytical Geometry — Certification Quiz',
                                         'questions': [
@@ -682,6 +683,302 @@ QUIZ_BANK = {'quiz-calculus-analytical-geometry': {'title': 'Calculus & Analytic
                                                             'The sample size',
                                                             'The mean value'],
                                                 'correct': 1}]}}
+
+
+# The original 30 questions are recall/basic theorem recognition (Easy).
+# Preserve their order and answer keys so existing signed attempts remain valid.
+for question in QUIZ_BANK["quiz-linear-algebra"]["questions"]:
+    question.setdefault("difficulty", "Easy")
+QUIZ_BANK["quiz-linear-algebra"]["questions"].extend([
+    {
+        'q': 'Using Doolittle LU without row exchanges for A=[2, 3; 26, 54], what is l21?',
+        'options': ['13', '14', '12', '15'],
+        'correct': 0,
+        'topic': 'LU Decomposition',
+        'difficulty': 'Easy',
+        'explanation': 'Unit diagonal L gives l21=a21/u11=26/2=13.',
+    },
+    {
+        'q': 'Solve Ux=[67; 195] for U=[2, 3; 0, 15]. What is x1?',
+        'options': ['15', '14', '13', '16'],
+        'correct': 1,
+        'topic': 'LU Decomposition',
+        'difficulty': 'Medium',
+        'explanation': 'Back substitution gives x2=13; then x1=(67−3×13)/2=14.',
+    },
+    {
+        'q': 'For A=[2, 3; 26, 54] and b=[-11; -338], use unit-diagonal LU, then two triangular solves. What is x1+x2?',
+        'options': ['2', '0', '1', '3'],
+        'correct': 2,
+        'topic': 'LU Decomposition',
+        'difficulty': 'Hard',
+        'explanation': 'Elimination multiplier 13 gives U=[2, 3; 0, 15]. Forward and back substitution yield x=[14; -13], whose entries sum to 1.',
+    },
+    {
+        'q': 'A=[196, 28; 28, 173]=LLᵀ with positive diagonal L. What is l11?',
+        'options': ['15', '13', '16', '14'],
+        'correct': 3,
+        'topic': 'Cholesky Decomposition',
+        'difficulty': 'Easy',
+        'explanation': 'l11=√a11=√196=14.',
+    },
+    {
+        'q': 'A=[196, 28; 28, 173]. In the positive-diagonal Cholesky factor, what is l22?',
+        'options': ['13', '14', '12', '15'],
+        'correct': 0,
+        'topic': 'Cholesky Decomposition',
+        'difficulty': 'Medium',
+        'explanation': 'l11=14, l21=28/14=2, and l22=√(173−4)=13.',
+    },
+    {
+        'q': 'Solve Ax=b by Cholesky for A=[196, 28; 28, 173], b=[2520; 191]. What is x1−x2?',
+        'options': ['15', '14', '13', '16'],
+        'correct': 1,
+        'topic': 'Cholesky Decomposition',
+        'difficulty': 'Hard',
+        'explanation': 'L=[14, 0; 2, 13]. Solve Ly=b and Lᵀx=y to obtain x=[13; -1]; x1−x2=14.',
+    },
+    {
+        'q': 'What is the trace of a single Jordan block J13(3)?',
+        'options': ['40', '38', '39', '41'],
+        'correct': 2,
+        'topic': 'Jordan Normal Form',
+        'difficulty': 'Easy',
+        'explanation': 'A size-13 block has 13 diagonal entries equal to 3, hence trace 39.',
+    },
+    {
+        'q': 'A has Jordan blocks J13(2) and J2(2). What is dim ker(A−2I)?',
+        'options': ['3', '1', '4', '2'],
+        'correct': 3,
+        'topic': 'Jordan Normal Form',
+        'difficulty': 'Medium',
+        'explanation': 'Each block contributes exactly one vector to the kernel, so the dimension equals the number of blocks.',
+    },
+    {
+        'q': 'N=diag(J15(0),J3(0),J1(0)). What is dim ker(N³)?',
+        'options': ['7', '8', '6', '9'],
+        'correct': 0,
+        'topic': 'Jordan Normal Form',
+        'difficulty': 'Hard',
+        'explanation': 'A block of size s contributes min(3,s). Here the contributions are 3+3+1=7.',
+    },
+    {
+        'q': 'What is the 1-norm of v=(13,−14,2)?',
+        'options': ['30', '29', '28', '31'],
+        'correct': 1,
+        'topic': 'Vector & Matrix Norms, Condition Number',
+        'difficulty': 'Easy',
+        'explanation': 'Add absolute values: 13+14+2=29.',
+    },
+    {
+        'q': 'For A=[13, -2; 1, 14], what is the induced matrix 1-norm?',
+        'options': ['17', '15', '16', '18'],
+        'correct': 2,
+        'topic': 'Vector & Matrix Norms, Condition Number',
+        'difficulty': 'Medium',
+        'explanation': 'Absolute column sums are 14 and 16; take their maximum.',
+    },
+    {
+        'q': 'Compute κ∞(A) for A=[13, -2; 1, 14].',
+        'options': ['53/23', '7/23', '76/23', '30/23'],
+        'correct': 3,
+        'topic': 'Vector & Matrix Norms, Condition Number',
+        'difficulty': 'Hard',
+        'explanation': 'A⁻¹=[7/92, 1/92; -1/184, 13/184]. The row-sum norms are 15 and 2/23; multiply to obtain 30/23.',
+    },
+    {
+        'q': 'For z=13+2i, what is |z|²?',
+        'options': ['173', '174', '172', '175'],
+        'correct': 0,
+        'topic': 'Complex Vector Spaces (Hermitian & Unitary Matrices)',
+        'difficulty': 'Easy',
+        'explanation': 'Multiply z by its conjugate: 13²+2²=173.',
+    },
+    {
+        'q': 'Using ⟨u,v⟩=u*v, u=(1,i) and v=(13,2i), what is ⟨u,v⟩?',
+        'options': ['16', '15', '14', '17'],
+        'correct': 1,
+        'topic': 'Complex Vector Spaces (Hermitian & Unitary Matrices)',
+        'difficulty': 'Medium',
+        'explanation': 'Conjugate u: (1,−i)·(13,2i)=13+2=15.',
+    },
+    {
+        'q': 'H=[14, i; −i, 14] is positive definite. What is κ2(H)?',
+        'options': ['28/13', '2/13', '15/13', '41/13'],
+        'correct': 2,
+        'topic': 'Complex Vector Spaces (Hermitian & Unitary Matrices)',
+        'difficulty': 'Hard',
+        'explanation': 'Its positive eigenvalues, also its singular values, are 15 and 13. Their ratio is 15/13.',
+    },
+    {
+        'q': 'For symmetric A=[13, 3; 3, 2], what is the coefficient of xy in xᵀAx?',
+        'options': ['7', '5', '8', '6'],
+        'correct': 3,
+        'topic': 'Quadratic Forms & Definiteness',
+        'difficulty': 'Easy',
+        'explanation': 'The two off-diagonal terms contribute 3xy+3yx=6xy.',
+    },
+    {
+        'q': 'For q(x,y)=13x²+2xy+13y², what is the smallest eigenvalue of its symmetric matrix?',
+        'options': ['12', '13', '11', '14'],
+        'correct': 0,
+        'topic': 'Quadratic Forms & Definiteness',
+        'difficulty': 'Medium',
+        'explanation': 'The matrix [13,1;1,13] has eigenvalues 13±1. The smaller is 12>0.',
+    },
+    {
+        'q': 'Minimize q(x,y)=13x²+13y² subject to x+y=1. What is the minimum?',
+        'options': ['15/2', '13/2', '11/2', '17/2'],
+        'correct': 1,
+        'topic': 'Quadratic Forms & Definiteness',
+        'difficulty': 'Hard',
+        'explanation': 'Substitute y=1−x and complete the square: q=213(x−1/2)²+13/2. The minimum is 13/2.',
+    },
+    {
+        'q': 'Basis B=((1,0),(13,1)). If [v]B=(2,3), what is the first standard coordinate of v?',
+        'options': ['42', '40', '41', '43'],
+        'correct': 2,
+        'topic': 'Change of Basis & Similarity Transformations',
+        'difficulty': 'Easy',
+        'explanation': 'v=2(1,0)+3(13,1)=(41,3).',
+    },
+    {
+        'q': 'For basis B=((1,0),(13,1)), v=(29,2). What is the first B-coordinate?',
+        'options': ['4', '2', '5', '3'],
+        'correct': 3,
+        'topic': 'Change of Basis & Similarity Transformations',
+        'difficulty': 'Medium',
+        'explanation': 'Solve P c=v: c2=2, c1=29−13×2=3.',
+    },
+    {
+        'q': '[T]B=P⁻¹AP, A=diag(2,14), P=[1, 13; 0, 1]. What is entry (1,2) of [T²]B?',
+        'options': ['-2496', '-2495', '-2497', '-2494'],
+        'correct': 0,
+        'topic': 'Change of Basis & Similarity Transformations',
+        'difficulty': 'Hard',
+        'explanation': '[T²]B=P⁻¹A²P=[4, -2496; 0, 196]. Squaring the eigenvalues before changing coordinates gives the entry -2496.',
+    },
+    {
+        'q': 'Translate the point (2,3) by (13,−1). What is its new x-coordinate?',
+        'options': ['16', '15', '14', '17'],
+        'correct': 1,
+        'topic': 'Affine Transformations & Homogeneous Coordinates',
+        'difficulty': 'Easy',
+        'explanation': 'Translation adds the displacement: x′=2+13=15.',
+    },
+    {
+        'q': 'First scale by 13, then translate by (1,2). Starting from (3,1), what is the final x-coordinate?',
+        'options': ['41', '39', '40', '42'],
+        'correct': 2,
+        'topic': 'Affine Transformations & Homogeneous Coordinates',
+        'difficulty': 'Medium',
+        'explanation': 'Scaling gives (39,13); translation then gives x=40. Order matters.',
+    },
+    {
+        'q': 'H=[13, 1, 2; 0, 2, 3; 0, 0, 1] maps homogeneous points. The output is (18,9,1). What is the input x-coordinate?',
+        'options': ['2', '0', '3', '1'],
+        'correct': 3,
+        'topic': 'Affine Transformations & Homogeneous Coordinates',
+        'difficulty': 'Hard',
+        'explanation': 'Invert y′=2y+3 to obtain y=3; then x=(18−3−2)/13=1.',
+    },
+    {
+        'q': 'A feature has observations 13, 15, 17. What is the centered value of its first observation?',
+        'options': ['-2', '-1', '-3', '0'],
+        'correct': 0,
+        'topic': 'Principal Component Analysis (PCA)',
+        'difficulty': 'Easy',
+        'explanation': 'The mean is 15; subtract it from 13 to get −2.',
+    },
+    {
+        'q': 'Covariance eigenvalues are 16,2,1. What fraction of total variance is explained by the leading component?',
+        'options': ['35/19', '16/19', '-3/19', '54/19'],
+        'correct': 1,
+        'topic': 'Principal Component Analysis (PCA)',
+        'difficulty': 'Medium',
+        'explanation': 'Divide the largest eigenvalue 16 by their sum 19: 16/19.',
+    },
+    {
+        'q': 'A centered data matrix has singular values 16,2,1. What is the minimum squared Frobenius error of a rank-one reconstruction?',
+        'options': ['6', '4', '5', '7'],
+        'correct': 2,
+        'topic': 'Principal Component Analysis (PCA)',
+        'difficulty': 'Hard',
+        'explanation': 'By the truncated-SVD approximation theorem, squared error is the sum of discarded singular-value squares: 2²+1²=5.',
+    },
+    {
+        'q': 'A column-stochastic matrix has first column (13/14, x). What is x?',
+        'options': ['15/14', '-13/14', '29/14', '1/14'],
+        'correct': 3,
+        'topic': 'Markov Chains & Steady States',
+        'difficulty': 'Easy',
+        'explanation': 'The column must sum to 1, so x=1−13/14=1/14.',
+    },
+    {
+        'q': 'Find the first coordinate of the stationary distribution for column-stochastic P=[14/15, 2/15; 1/15, 13/15].',
+        'options': ['2/3', '5/3', '-1/3', '8/3'],
+        'correct': 0,
+        'topic': 'Markov Chains & Steady States',
+        'difficulty': 'Medium',
+        'explanation': 'Balance pπ1=qπ2 gives π1=2π2. Normalization yields π1=2/3, π2=1/3.',
+    },
+    {
+        'q': 'For column-stochastic P=[14/15, 2/15; 1/15, 13/15], starting in state 1, what is the state-1 probability after three transitions?',
+        'options': ['689/375', '314/375', '-61/375', '1064/375'],
+        'correct': 1,
+        'topic': 'Markov Chains & Steady States',
+        'difficulty': 'Hard',
+        'explanation': 'The stationary value is 2/3 and the other eigenvalue is 4/5. Thus p1(3)=2/3+(1/3)(4/5)³=314/375.',
+    },
+    {
+        'q': 'Convert x+y≤16 to x+y+s=16. At (x,y)=(1,1), what is slack s?',
+        'options': ['15', '13', '14', '16'],
+        'correct': 2,
+        'topic': 'Linear Programming (Simplex Method)',
+        'difficulty': 'Easy',
+        'explanation': 'The slack is unused capacity: 16−1−1=14.',
+    },
+    {
+        'q': 'A primal simplex entering column has positive entries 2,1 and RHS values 26, 15. What is the maximum feasible step from the current basic solution?',
+        'options': ['14', '12', '15', '13'],
+        'correct': 3,
+        'topic': 'Linear Programming (Simplex Method)',
+        'difficulty': 'Medium',
+        'explanation': 'The ratio test gives 26/2=13 and 15/1=15. The smaller nonnegative ratio is 13.',
+    },
+    {
+        'q': 'Maximize 3x+2y subject to x+y≤26, x≤13, x,y≥0. What is the optimal objective?',
+        'options': ['65', '66', '64', '67'],
+        'correct': 0,
+        'topic': 'Linear Programming (Simplex Method)',
+        'difficulty': 'Hard',
+        'explanation': 'Increasing x is preferred but x≤13. The maximizing vertex is (13,13) with objective 313+213=65; other vertices give smaller values.',
+    },
+    {
+        'q': 'A linear ML layer computes y=wx with w=(13,2) and x=(1,3). What scalar is produced?',
+        'options': ['20', '19', '18', '21'],
+        'correct': 1,
+        'topic': 'Vector Space Applications in Graphics & ML',
+        'difficulty': 'Easy',
+        'explanation': 'The dot product is 13×1+2×3=19.',
+    },
+    {
+        'q': 'A linear predictor uses w=(2,−1), x=(13,3), bias 4. What is its prediction?',
+        'options': ['28', '26', '27', '29'],
+        'correct': 2,
+        'topic': 'Vector Space Applications in Graphics & ML',
+        'difficulty': 'Medium',
+        'explanation': 'wᵀx+b=2×13−3+4=27.',
+    },
+    {
+        'q': 'A ridge model minimizes (w−13)²+3w². What coefficient w minimizes it?',
+        'options': ['17/4', '9/4', '21/4', '13/4'],
+        'correct': 3,
+        'topic': 'Vector Space Applications in Graphics & ML',
+        'difficulty': 'Hard',
+        'explanation': 'Differentiate: 2(w−13)+6w=0. Hence 8w=213, w=13/4.',
+    },
+])
 
 
 def get_quiz(quiz_id):
