@@ -72,7 +72,7 @@ class EndpointTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(response.status_code, 200)
         result = data(response)
         self.assertEqual(len(result['questions']), 99)
-        self.assertTrue(all(set(q) == {'index', 'q', 'options'} for q in result['questions']))
+        self.assertTrue(all(set(q) == {'index', 'q', 'options', 'topic', 'difficulty'} for q in result['questions']))
         payload, error = quiz._decode_attempt(result['attempt_token'])
         self.assertIsNone(error)
         self.assertEqual(sorted(payload['order']), list(range(99)))
