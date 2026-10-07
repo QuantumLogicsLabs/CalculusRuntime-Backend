@@ -172,6 +172,8 @@ async def start_quiz(request: Request):
                 "index": pos,
                 "q": q["q"],
                 "options": [q["options"][i] for i in perm],
+                "topic": q.get("topic"),
+                "difficulty": q.get("difficulty"),
             }
         )
 
